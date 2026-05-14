@@ -1106,8 +1106,10 @@
           const outputName = buildOutputName(state.originalName);
           if (state.styledWorkbook) {
             await downloadStyledWorkbook(outputName);
+            log("已使用富文本红色导出。");
           } else {
             XLSX.writeFile(state.workbook, outputName, { compression: true });
+            log("已降级为普通文本导出，字体颜色不会保留。");
           }
           setProgress(1, `已导出：${outputName}`);
           log(`导出完成：${outputName}`);
@@ -1327,16 +1329,20 @@
         }
 
         const cell = sheet.getCell(address);
+        const baseFont = cloneExcelFont(cell.font);
         cell.value = {
           richText: [
             {
               text: original,
-              font: cloneExcelFont(cell.font),
+              font: {
+                ...baseFont,
+                color: baseFont.color || { argb: "FF000000" },
+              },
             },
             {
               text: annotation,
               font: {
-                ...cloneExcelFont(cell.font),
+                ...baseFont,
                 color: { argb: "FFFF0000" },
               },
             },

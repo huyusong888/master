@@ -853,10 +853,10 @@
             for (let col = range.s.c; col <= range.e.c; col += 1) {
               const address = XLSX.utils.encode_cell({ r: row, c: col });
               const cell = sheet[address];
-              if (!cell || typeof cell.v !== "string") {
+              const value = extractCellText(cell);
+              if (!value) {
                 continue;
               }
-              const value = els.trimCells.checked ? cell.v.trim() : cell.v;
               if (!shouldTranslate(value)) {
                 continue;
               }
@@ -890,16 +890,68 @@
         if (!text) {
           return false;
         }
-        if (els.skipAnnotated.checked && /[\u4e00-\u9fff][）)]\s*$/.test(text)) {
-          return false;
-        }
         if (!/[A-Za-z]/.test(text)) {
           return false;
         }
         if (/^[\d\s.,:;!?()[\]{}'"#/\\|+*=<>_%$@~-]+$/.test(text)) {
           return false;
         }
+        if (els.skipAnnotated.checked && !hasUnannotatedEnglish(text)) {
+          return false;
+        }
         return true;
+      }
+
+      function extractCellText(cell) {
+        if (!cell) {
+          return "";
+        }
+        if (["n", "d", "b", "e"].includes(cell.t)) {
+          return "";
+        }
+
+        const candidates = [
+          typeof cell.v === "string" ? cell.v : "",
+          typeof cell.w === "string" ? cell.w : "",
+          typeof cell.h === "string" ? stripHtml(cell.h) : "",
+          extractRichText(cell.r),
+        ];
+
+        const text = candidates.find((candidate) => /[A-Za-z]/.test(candidate));
+        if (!text) {
+          return "";
+        }
+        return els.trimCells.checked ? text.trim() : text;
+      }
+
+      function extractRichText(runs) {
+        if (!Array.isArray(runs)) {
+          return "";
+        }
+        return runs
+          .map((run) => run?.t || "")
+          .join("")
+          .trim();
+      }
+
+      function stripHtml(html) {
+        return String(html)
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<[^>]+>/g, "")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+      }
+
+      function hasUnannotatedEnglish(text) {
+        const withoutAnnotatedPhrases = String(text).replace(
+          /[A-Za-z][A-Za-z0-9\s.,:'’"&/+\-_%#]*[（(][^）)]*[\)）]/g,
+          ""
+        );
+        return /[A-Za-z]/.test(withoutAnnotatedPhrases);
       }
 
       function renderPreview(candidates) {
@@ -961,7 +1013,7 @@
             done += 1;
             els.doneCount.textContent = String(done);
             setProgress(done / uniqueTexts.length, `正在翻译 ${done}/${uniqueTexts.length}`);
-            await pause(provider === "mymemory" ? 280 : 80);
+            await pause(getProviderDelay(provider));
           }
 
           applyTranslations();
@@ -998,16 +1050,16 @@
         const url = new URL("https://api.mymemory.translated.net/get");
         url.searchParams.set("q", text);
         url.searchParams.set("langpair", `en|${target}`);
-        const response = await fetch(url);
+        const response = await fetchWithRetry(url);
         if (!response.ok) {
-          throw new Error(`MyMemory 请求失败：${response.status}`);
+          throw new Error(await buildHttpError("MyMemory 请求失败", response));
         }
         const data = await response.json();
         return data?.responseData?.translatedText || "";
       }
 
       async function translateWithLibre(text) {
-        const response = await fetch(els.endpoint.value.trim(), {
+        const response = await fetchWithRetry(els.endpoint.value.trim(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1018,14 +1070,14 @@
           }),
         });
         if (!response.ok) {
-          throw new Error(`LibreTranslate 请求失败：${response.status}`);
+          throw new Error(await buildHttpError("LibreTranslate 请求失败", response));
         }
         const data = await response.json();
         return data.translatedText || "";
       }
 
       async function translateWithOpenAI(text) {
-        const response = await fetch(els.endpoint.value.trim(), {
+        const response = await fetchWithRetry(els.endpoint.value.trim(), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1048,14 +1100,14 @@
           }),
         });
         if (!response.ok) {
-          throw new Error(`OpenAI 兼容接口请求失败：${response.status}`);
+          throw new Error(await buildHttpError("OpenAI 兼容接口请求失败", response));
         }
         const data = await response.json();
         return data?.choices?.[0]?.message?.content || "";
       }
 
       async function translateWithProxy(text) {
-        const response = await fetch(els.endpoint.value.trim(), {
+        const response = await fetchWithRetry(els.endpoint.value.trim(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1064,10 +1116,70 @@
           }),
         });
         if (!response.ok) {
-          throw new Error(`云端代理接口请求失败：${response.status}`);
+          throw new Error(await buildHttpError("云端代理接口请求失败", response));
         }
         const data = await response.json();
         return data.translation || "";
+      }
+
+      async function fetchWithRetry(url, options = {}, maxRetries = 4) {
+        let response;
+        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+          response = await fetch(url, options);
+          if (response.ok || !shouldRetryStatus(response.status) || attempt === maxRetries) {
+            return response;
+          }
+
+          const waitMs = getRetryDelay(response, attempt);
+          log(`接口限流或繁忙，${Math.round(waitMs / 1000)} 秒后重试（第 ${attempt + 1}/${maxRetries} 次）。`);
+          await pause(waitMs);
+        }
+        return response;
+      }
+
+      function shouldRetryStatus(status) {
+        return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+      }
+
+      function getRetryDelay(response, attempt) {
+        const retryAfter = Number(response.headers.get("Retry-After"));
+        if (Number.isFinite(retryAfter) && retryAfter > 0) {
+          return Math.min(retryAfter * 1000, 30000);
+        }
+        return Math.min(1200 * 2 ** attempt, 30000);
+      }
+
+      async function buildHttpError(prefix, response) {
+        const detail = await readErrorDetail(response);
+        if (response.status === 429) {
+          return `${prefix}：429。请求太频繁或账户额度不足，请稍后重试、减少表格内容，或检查 OpenAI 额度/限额。${detail}`;
+        }
+        return `${prefix}：${response.status}。${detail}`;
+      }
+
+      async function readErrorDetail(response) {
+        try {
+          const data = await response.clone().json();
+          const message = data?.error?.message || data?.message || data?.detail || "";
+          return message ? ` 服务返回：${message}` : "";
+        } catch {
+          try {
+            const text = await response.clone().text();
+            return text ? ` 服务返回：${text.slice(0, 220)}` : "";
+          } catch {
+            return "";
+          }
+        }
+      }
+
+      function getProviderDelay(provider) {
+        if (provider === "openai" || provider === "proxy") {
+          return 850;
+        }
+        if (provider === "mymemory") {
+          return 350;
+        }
+        return 250;
       }
 
       function applyTranslations() {
@@ -1079,7 +1191,7 @@
           }
           const sheet = state.workbook.Sheets[item.sheetName];
           const cell = sheet[item.address];
-          const original = els.trimCells.checked ? cell.v.trim() : cell.v;
+          const original = extractCellText(cell) || item.text;
           cell.v = `${original}${left}${translation}${right}`;
           cell.w = cell.v;
           cell.t = "s";

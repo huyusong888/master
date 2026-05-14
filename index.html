@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Excel 英文括注翻译工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <style>
+      :root {
+        --ink: #18212f;
+        --muted: #667085;
+        --line: #d7dde8;
+        --soft: #f5f7fb;
+        --panel: #ffffff;
+        --accent: #0f766e;
+        --accent-strong: #0b5f59;
+        --amber: #b45309;
+        --danger: #b42318;
+        --shadow: 0 18px 45px rgba(31, 42, 68, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background:
+          linear-gradient(135deg, rgba(15, 118, 110, 0.08), transparent 34%),
+          linear-gradient(225deg, rgba(180, 83, 9, 0.08), transparent 30%),
+          #eef2f7;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+      }
+
+      .shell {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 32px 0;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        color: #fff;
+        border-radius: 8px;
+        background: linear-gradient(145deg, #0f766e, #164e63);
+        box-shadow: var(--shadow);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(24px, 4vw, 38px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .panel {
+        border: 1px solid rgba(215, 221, 232, 0.92);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow);
+      }
+
+      .panel-inner {
+        padding: 22px;
+      }
+
+      .dropzone {
+        position: relative;
+        display: grid;
+        min-height: 210px;
+        place-items: center;
+        padding: 28px;
+        border: 2px dashed #aab7c9;
+        border-radius: 8px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(245, 247, 251, 0.88)),
+          radial-gradient(circle at 24px 24px, rgba(15, 118, 110, 0.12) 2px, transparent 3px);
+        background-size: auto, 28px 28px;
+        text-align: center;
+        transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+      }
+
+      .dropzone.dragging {
+        border-color: var(--accent);
+        background-color: #e8f7f3;
+        transform: translateY(-1px);
+      }
+
+      .dropzone input {
+        position: absolute;
+        inset: 0;
+        cursor: pointer;
+        opacity: 0;
+      }
+
+      .upload-icon {
+        display: grid;
+        width: 58px;
+        height: 58px;
+        margin: 0 auto 14px;
+        place-items: center;
+        color: var(--accent);
+        border-radius: 8px;
+        background: #e6f4f1;
+      }
+
+      .drop-title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 760;
+      }
+
+      .drop-hint {
+        margin: 8px auto 0;
+        max-width: 540px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .file-line {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 14px;
+        color: var(--accent-strong);
+        font-weight: 700;
+        word-break: break-word;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .control {
+        display: grid;
+        gap: 8px;
+      }
+
+      .control.full {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        color: #344054;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      input[type="text"],
+      input[type="url"],
+      input[type="password"],
+      select {
+        width: 100%;
+        height: 42px;
+        padding: 0 12px;
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        outline: none;
+      }
+
+      input:focus,
+      select:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        padding: 4px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--soft);
+      }
+
+      .segmented label {
+        display: flex;
+        min-height: 34px;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        border-radius: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .segmented input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .segmented input:checked + span {
+        color: var(--accent-strong);
+        font-weight: 800;
+      }
+
+      .segmented label:has(input:checked) {
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(31, 42, 68, 0.12);
+      }
+
+      .checks {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .check {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        color: #344054;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .check input {
+        width: 18px;
+        height: 18px;
+        margin-top: 1px;
+        accent-color: var(--accent);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .btn {
+        display: inline-flex;
+        min-height: 42px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 15px;
+        cursor: pointer;
+        border-radius: 8px;
+        color: #fff;
+        background: var(--accent);
+        font-weight: 800;
+        transition: background 160ms ease, transform 160ms ease, opacity 160ms ease;
+      }
+
+      .btn:hover {
+        background: var(--accent-strong);
+        transform: translateY(-1px);
+      }
+
+      .btn.secondary {
+        color: var(--ink);
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .btn.secondary:hover {
+        background: var(--soft);
+      }
+
+      .btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+        transform: none;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .stat {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 24px;
+        line-height: 1;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 7px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .progress-wrap {
+        margin-top: 16px;
+      }
+
+      .progress-track {
+        overflow: hidden;
+        height: 10px;
+        border-radius: 999px;
+        background: #e4e9f2;
+      }
+
+      .progress-bar {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), #2563eb);
+        transition: width 180ms ease;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 9px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .preview-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .preview-head h2 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 9px;
+        color: #155e75;
+        border: 1px solid #bae6fd;
+        border-radius: 999px;
+        background: #ecfeff;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .table-wrap {
+        overflow: auto;
+        max-height: 360px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+
+      table {
+        width: 100%;
+        min-width: 520px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 11px 12px;
+        border-bottom: 1px solid #edf0f5;
+        text-align: left;
+        vertical-align: top;
+        font-size: 13px;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        color: #475467;
+        background: #f8fafc;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      td {
+        color: #1f2937;
+        line-height: 1.5;
+      }
+
+      .empty {
+        display: grid;
+        min-height: 220px;
+        place-items: center;
+        padding: 24px;
+        color: var(--muted);
+        text-align: center;
+        background:
+          linear-gradient(90deg, rgba(15, 118, 110, 0.06) 1px, transparent 1px),
+          linear-gradient(rgba(15, 118, 110, 0.06) 1px, transparent 1px);
+        background-size: 28px 28px;
+      }
+
+      .log {
+        overflow: auto;
+        max-height: 170px;
+        margin-top: 14px;
+        padding: 12px;
+        color: #344054;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .notice {
+        margin-top: 14px;
+        padding: 12px 14px;
+        color: #7a4a10;
+        border: 1px solid #f1c987;
+        border-radius: 8px;
+        background: #fff8eb;
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 860px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .topbar {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .controls,
+        .stats {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .shell {
+          width: min(100% - 22px, 1180px);
+          padding: 18px 0;
+        }
+
+        .panel-inner,
+        .dropzone {
+          padding: 16px;
+        }
+
+        .actions .btn {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <i data-lucide="languages"></i>
+          </div>
+          <div>
+            <h1>Excel 英文括注翻译工具</h1>
+            <p class="subtitle">上传表格后，把英文单元格改写为 “Original English（中文翻译）”，再导出新 Excel。</p>
+          </div>
+        </div>
+        <span class="badge"><i data-lucide="shield-check" size="15"></i>本地解析表格</span>
+      </header>
+
+      <section class="layout">
+        <div class="panel">
+          <div class="panel-inner">
+            <div id="dropzone" class="dropzone">
+              <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.csv" />
+              <div>
+                <div class="upload-icon" aria-hidden="true">
+                  <i data-lucide="file-spreadsheet"></i>
+                </div>
+                <p class="drop-title">拖入或点击选择 Excel 文件</p>
+                <p class="drop-hint">支持 `.xlsx`、`.xlsm`、`.xls` 和 `.csv`。导出的文件会保留工作簿结构，并只改写识别到的英文文本单元格。</p>
+                <div id="fileLine" class="file-line hidden">
+                  <i data-lucide="paperclip" size="17"></i>
+                  <span id="fileName"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="controls">
+              <div class="control">
+                <label for="sheetMode">处理工作表</label>
+                <select id="sheetMode">
+                  <option value="all">全部工作表</option>
+                  <option value="active">仅预览中的第一个工作表</option>
+                </select>
+              </div>
+
+              <div class="control">
+                <label for="provider">翻译服务</label>
+                <select id="provider">
+                  <option value="mymemory">MyMemory 免费接口</option>
+                  <option value="libre">LibreTranslate 自定义接口</option>
+                  <option value="proxy">云端代理接口</option>
+                  <option value="openai">OpenAI 兼容接口</option>
+                  <option value="mock">演示模式</option>
+                </select>
+              </div>
+
+              <div id="endpointControl" class="control full hidden">
+                <label for="endpoint">接口地址</label>
+                <input id="endpoint" type="url" placeholder="例如 https://libretranslate.com/translate 或 https://api.openai.com/v1/chat/completions" />
+              </div>
+
+              <div id="apiKeyControl" class="control hidden">
+                <label for="apiKey">API Key</label>
+                <input id="apiKey" type="password" placeholder="只保存在当前浏览器页面" />
+              </div>
+
+              <div id="modelControl" class="control hidden">
+                <label for="model">模型</label>
+                <input id="model" type="text" value="gpt-4o-mini" />
+              </div>
+
+              <div class="control">
+                <label>括号样式</label>
+                <div class="segmented">
+                  <label>
+                    <input type="radio" name="brackets" value="full" checked />
+                    <span>中文括号</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="brackets" value="half" />
+                    <span>英文括号</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="control">
+                <label for="targetLang">目标语言</label>
+                <select id="targetLang">
+                  <option value="zh-CN">简体中文</option>
+                  <option value="zh-TW">繁体中文</option>
+                  <option value="ja">日语</option>
+                  <option value="ko">韩语</option>
+                  <option value="fr">法语</option>
+                  <option value="de">德语</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="checks">
+              <label class="check">
+                <input id="skipAnnotated" type="checkbox" checked />
+                <span>跳过已经带有中文括注的单元格</span>
+              </label>
+              <label class="check">
+                <input id="trimCells" type="checkbox" checked />
+                <span>忽略文本首尾空白后再判断是否翻译</span>
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="scanBtn" class="btn secondary" type="button" disabled title="先扫描可翻译单元格">
+                <i data-lucide="search" size="18"></i>
+                扫描
+              </button>
+              <button id="translateBtn" class="btn" type="button" disabled title="翻译并导出新 Excel">
+                <i data-lucide="download" size="18"></i>
+                翻译并导出
+              </button>
+              <button id="resetBtn" class="btn secondary" type="button" title="清空当前文件">
+                <i data-lucide="rotate-ccw" size="18"></i>
+                重置
+              </button>
+            </div>
+
+            <div class="stats" aria-live="polite">
+              <div class="stat">
+                <strong id="cellCount">0</strong>
+                <span>待处理单元格</span>
+              </div>
+              <div class="stat">
+                <strong id="uniqueCount">0</strong>
+                <span>唯一英文文本</span>
+              </div>
+              <div class="stat">
+                <strong id="doneCount">0</strong>
+                <span>已翻译</span>
+              </div>
+            </div>
+
+            <div class="progress-wrap">
+              <div class="progress-track">
+                <div id="progressBar" class="progress-bar"></div>
+              </div>
+              <div class="status">
+                <span id="statusText">等待上传文件</span>
+                <span id="percentText">0%</span>
+              </div>
+            </div>
+
+            <div id="notice" class="notice">
+              公开分享时不要把固定 API Key 写进网页。想让别人免填密钥使用，可以部署随项目提供的云端代理接口。
+            </div>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="panel-inner">
+            <div class="preview-head">
+              <h2>预览</h2>
+              <span id="sheetBadge" class="badge"><i data-lucide="table-2" size="15"></i>未载入</span>
+            </div>
+
+            <div id="emptyPreview" class="empty">
+              <div>
+                <i data-lucide="rows-3" size="38"></i>
+                <p>选择 Excel 后会显示前几条可翻译内容。</p>
+              </div>
+            </div>
+
+            <div id="tableWrap" class="table-wrap hidden">
+              <table>
+                <thead>
+                  <tr>
+                    <th>工作表</th>
+                    <th>单元格</th>
+                    <th>原文</th>
+                  </tr>
+                </thead>
+                <tbody id="previewBody"></tbody>
+              </table>
+            </div>
+
+            <div id="log" class="log">日志将在这里显示。</div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        file: null,
+        workbook: null,
+        originalName: "",
+        candidates: [],
+        cache: new Map(),
+      };
+
+      const els = {
+        dropzone: document.querySelector("#dropzone"),
+        fileInput: document.querySelector("#fileInput"),
+        fileLine: document.querySelector("#fileLine"),
+        fileName: document.querySelector("#fileName"),
+        sheetMode: document.querySelector("#sheetMode"),
+        provider: document.querySelector("#provider"),
+        endpointControl: document.querySelector("#endpointControl"),
+        endpoint: document.querySelector("#endpoint"),
+        apiKeyControl: document.querySelector("#apiKeyControl"),
+        apiKey: document.querySelector("#apiKey"),
+        modelControl: document.querySelector("#modelControl"),
+        model: document.querySelector("#model"),
+        targetLang: document.querySelector("#targetLang"),
+        skipAnnotated: document.querySelector("#skipAnnotated"),
+        trimCells: document.querySelector("#trimCells"),
+        scanBtn: document.querySelector("#scanBtn"),
+        translateBtn: document.querySelector("#translateBtn"),
+        resetBtn: document.querySelector("#resetBtn"),
+        cellCount: document.querySelector("#cellCount"),
+        uniqueCount: document.querySelector("#uniqueCount"),
+        doneCount: document.querySelector("#doneCount"),
+        progressBar: document.querySelector("#progressBar"),
+        statusText: document.querySelector("#statusText"),
+        percentText: document.querySelector("#percentText"),
+        emptyPreview: document.querySelector("#emptyPreview"),
+        tableWrap: document.querySelector("#tableWrap"),
+        previewBody: document.querySelector("#previewBody"),
+        sheetBadge: document.querySelector("#sheetBadge"),
+        log: document.querySelector("#log"),
+      };
+
+      function initialize() {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+        bindEvents();
+        syncProviderFields();
+      }
+
+      function bindEvents() {
+        els.fileInput.addEventListener("change", (event) => {
+          const [file] = event.target.files;
+          if (file) {
+            loadFile(file);
+          }
+        });
+
+        ["dragenter", "dragover"].forEach((name) => {
+          els.dropzone.addEventListener(name, (event) => {
+            event.preventDefault();
+            els.dropzone.classList.add("dragging");
+          });
+        });
+
+        ["dragleave", "drop"].forEach((name) => {
+          els.dropzone.addEventListener(name, (event) => {
+            event.preventDefault();
+            els.dropzone.classList.remove("dragging");
+          });
+        });
+
+        els.dropzone.addEventListener("drop", (event) => {
+          const [file] = event.dataTransfer.files;
+          if (file) {
+            loadFile(file);
+          }
+        });
+
+        els.provider.addEventListener("change", syncProviderFields);
+        els.sheetMode.addEventListener("change", scanWorkbook);
+        els.skipAnnotated.addEventListener("change", scanWorkbook);
+        els.trimCells.addEventListener("change", scanWorkbook);
+        els.scanBtn.addEventListener("click", scanWorkbook);
+        els.translateBtn.addEventListener("click", translateAndExport);
+        els.resetBtn.addEventListener("click", reset);
+      }
+
+      function syncProviderFields() {
+        const provider = els.provider.value;
+        const needsEndpoint = provider === "libre" || provider === "openai" || provider === "proxy";
+        const needsKey = provider === "openai";
+        els.endpointControl.classList.toggle("hidden", !needsEndpoint);
+        els.apiKeyControl.classList.toggle("hidden", !needsKey);
+        els.modelControl.classList.toggle("hidden", !needsKey);
+
+        if (
+          provider === "libre" &&
+          (!els.endpoint.value || els.endpoint.value.includes("/chat/completions"))
+        ) {
+          els.endpoint.value = "https://libretranslate.com/translate";
+        }
+        if (provider === "openai" && (!els.endpoint.value || els.endpoint.value.includes("libretranslate"))) {
+          els.endpoint.value = "https://api.openai.com/v1/chat/completions";
+        }
+        if (
+          provider === "proxy" &&
+          (!els.endpoint.value ||
+            els.endpoint.value.includes("libretranslate") ||
+            els.endpoint.value.includes("/chat/completions"))
+        ) {
+          els.endpoint.value = "https://your-worker.your-subdomain.workers.dev/translate";
+        }
+      }
+
+      async function loadFile(file) {
+        state.file = file;
+        state.originalName = file.name;
+        state.cache.clear();
+        setBusy(true, "正在读取表格");
+        log(`读取文件：${file.name}`);
+
+        try {
+          const buffer = await file.arrayBuffer();
+          state.workbook = XLSX.read(buffer, { type: "array", cellDates: true, cellStyles: true });
+          els.fileName.textContent = file.name;
+          els.fileLine.classList.remove("hidden");
+          els.scanBtn.disabled = false;
+          scanWorkbook();
+        } catch (error) {
+          fail(`读取失败：${error.message}`);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function scanWorkbook() {
+        if (!state.workbook) {
+          return;
+        }
+
+        const names = getTargetSheetNames();
+        const candidates = [];
+        for (const sheetName of names) {
+          const sheet = state.workbook.Sheets[sheetName];
+          if (!sheet || !sheet["!ref"]) {
+            continue;
+          }
+
+          const range = XLSX.utils.decode_range(sheet["!ref"]);
+          for (let row = range.s.r; row <= range.e.r; row += 1) {
+            for (let col = range.s.c; col <= range.e.c; col += 1) {
+              const address = XLSX.utils.encode_cell({ r: row, c: col });
+              const cell = sheet[address];
+              if (!cell || typeof cell.v !== "string") {
+                continue;
+              }
+              const value = els.trimCells.checked ? cell.v.trim() : cell.v;
+              if (!shouldTranslate(value)) {
+                continue;
+              }
+              candidates.push({ sheetName, address, text: value });
+            }
+          }
+        }
+
+        state.candidates = candidates;
+        const unique = new Set(candidates.map((item) => item.text));
+        els.cellCount.textContent = String(candidates.length);
+        els.uniqueCount.textContent = String(unique.size);
+        els.doneCount.textContent = "0";
+        setProgress(0, candidates.length ? "扫描完成，可以开始翻译" : "没有找到需要翻译的英文单元格");
+        renderPreview(candidates);
+        els.translateBtn.disabled = !candidates.length;
+        log(`扫描完成：${candidates.length} 个单元格，${unique.size} 条唯一文本。`);
+      }
+
+      function getTargetSheetNames() {
+        if (!state.workbook) {
+          return [];
+        }
+        if (els.sheetMode.value === "active") {
+          return state.workbook.SheetNames.slice(0, 1);
+        }
+        return state.workbook.SheetNames;
+      }
+
+      function shouldTranslate(text) {
+        if (!text) {
+          return false;
+        }
+        if (els.skipAnnotated.checked && /[\u4e00-\u9fff][）)]\s*$/.test(text)) {
+          return false;
+        }
+        if (!/[A-Za-z]/.test(text)) {
+          return false;
+        }
+        if (/^[\d\s.,:;!?()[\]{}'"#/\\|+*=<>_%$@~-]+$/.test(text)) {
+          return false;
+        }
+        return true;
+      }
+
+      function renderPreview(candidates) {
+        els.previewBody.innerHTML = "";
+        els.sheetBadge.innerHTML = `<i data-lucide="table-2" size="15"></i>${getTargetSheetNames().length || 0} 张表`;
+        if (!candidates.length) {
+          els.emptyPreview.classList.remove("hidden");
+          els.tableWrap.classList.add("hidden");
+          if (window.lucide) {
+            window.lucide.createIcons();
+          }
+          return;
+        }
+
+        for (const item of candidates.slice(0, 40)) {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${escapeHtml(item.sheetName)}</td>
+            <td>${escapeHtml(item.address)}</td>
+            <td>${escapeHtml(item.text)}</td>
+          `;
+          els.previewBody.appendChild(row);
+        }
+
+        els.emptyPreview.classList.add("hidden");
+        els.tableWrap.classList.remove("hidden");
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }
+
+      async function translateAndExport() {
+        if (!state.workbook || !state.candidates.length) {
+          return;
+        }
+
+        const provider = els.provider.value;
+        if ((provider === "libre" || provider === "openai" || provider === "proxy") && !els.endpoint.value.trim()) {
+          fail("请填写接口地址。");
+          return;
+        }
+        if (provider === "openai" && !els.apiKey.value.trim()) {
+          fail("请填写 OpenAI 兼容接口的 API Key。");
+          return;
+        }
+
+        setBusy(true, "正在翻译");
+        setProgress(0, "正在准备翻译队列");
+        els.doneCount.textContent = "0";
+        log("开始翻译。");
+
+        try {
+          const uniqueTexts = [...new Set(state.candidates.map((item) => item.text))];
+          let done = 0;
+
+          for (const text of uniqueTexts) {
+            const translated = await translateText(text);
+            state.cache.set(text, cleanTranslation(translated));
+            done += 1;
+            els.doneCount.textContent = String(done);
+            setProgress(done / uniqueTexts.length, `正在翻译 ${done}/${uniqueTexts.length}`);
+            await pause(provider === "mymemory" ? 280 : 80);
+          }
+
+          applyTranslations();
+          const outputName = buildOutputName(state.originalName);
+          XLSX.writeFile(state.workbook, outputName, { compression: true });
+          setProgress(1, `已导出：${outputName}`);
+          log(`导出完成：${outputName}`);
+        } catch (error) {
+          fail(`处理失败：${error.message}`);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function translateText(text) {
+        const provider = els.provider.value;
+        if (provider === "mock") {
+          return `译文：${text}`;
+        }
+        if (provider === "libre") {
+          return translateWithLibre(text);
+        }
+        if (provider === "openai") {
+          return translateWithOpenAI(text);
+        }
+        if (provider === "proxy") {
+          return translateWithProxy(text);
+        }
+        return translateWithMyMemory(text);
+      }
+
+      async function translateWithMyMemory(text) {
+        const target = els.targetLang.value;
+        const url = new URL("https://api.mymemory.translated.net/get");
+        url.searchParams.set("q", text);
+        url.searchParams.set("langpair", `en|${target}`);
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`MyMemory 请求失败：${response.status}`);
+        }
+        const data = await response.json();
+        return data?.responseData?.translatedText || "";
+      }
+
+      async function translateWithLibre(text) {
+        const response = await fetch(els.endpoint.value.trim(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            q: text,
+            source: "en",
+            target: els.targetLang.value,
+            format: "text",
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`LibreTranslate 请求失败：${response.status}`);
+        }
+        const data = await response.json();
+        return data.translatedText || "";
+      }
+
+      async function translateWithOpenAI(text) {
+        const response = await fetch(els.endpoint.value.trim(), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${els.apiKey.value.trim()}`,
+          },
+          body: JSON.stringify({
+            model: els.model.value.trim() || "gpt-4o-mini",
+            temperature: 0,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Translate English spreadsheet cell text into the requested target language. Return only the translation, no quotes, no explanation.",
+              },
+              {
+                role: "user",
+                content: `Target language: ${els.targetLang.value}\nText: ${text}`,
+              },
+            ],
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`OpenAI 兼容接口请求失败：${response.status}`);
+        }
+        const data = await response.json();
+        return data?.choices?.[0]?.message?.content || "";
+      }
+
+      async function translateWithProxy(text) {
+        const response = await fetch(els.endpoint.value.trim(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            target: els.targetLang.value,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`云端代理接口请求失败：${response.status}`);
+        }
+        const data = await response.json();
+        return data.translation || "";
+      }
+
+      function applyTranslations() {
+        const [left, right] = getBrackets();
+        for (const item of state.candidates) {
+          const translation = state.cache.get(item.text);
+          if (!translation) {
+            continue;
+          }
+          const sheet = state.workbook.Sheets[item.sheetName];
+          const cell = sheet[item.address];
+          const original = els.trimCells.checked ? cell.v.trim() : cell.v;
+          cell.v = `${original}${left}${translation}${right}`;
+          cell.w = cell.v;
+          cell.t = "s";
+        }
+      }
+
+      function getBrackets() {
+        const selected = document.querySelector('input[name="brackets"]:checked')?.value;
+        return selected === "half" ? [" (", ")"] : ["（", "）"];
+      }
+
+      function cleanTranslation(value) {
+        return String(value || "")
+          .replace(/^["“”']|["“”']$/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      function buildOutputName(name) {
+        const safeName = name || "translated.xlsx";
+        const dot = safeName.lastIndexOf(".");
+        if (dot <= 0) {
+          return `${safeName}-括注翻译.xlsx`;
+        }
+        return `${safeName.slice(0, dot)}-括注翻译${safeName.slice(dot)}`;
+      }
+
+      function reset() {
+        state.file = null;
+        state.workbook = null;
+        state.originalName = "";
+        state.candidates = [];
+        state.cache.clear();
+        els.fileInput.value = "";
+        els.fileName.textContent = "";
+        els.fileLine.classList.add("hidden");
+        els.scanBtn.disabled = true;
+        els.translateBtn.disabled = true;
+        els.cellCount.textContent = "0";
+        els.uniqueCount.textContent = "0";
+        els.doneCount.textContent = "0";
+        els.previewBody.innerHTML = "";
+        els.emptyPreview.classList.remove("hidden");
+        els.tableWrap.classList.add("hidden");
+        els.sheetBadge.innerHTML = `<i data-lucide="table-2" size="15"></i>未载入`;
+        setProgress(0, "等待上传文件");
+        els.log.textContent = "日志将在这里显示。";
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      }
+
+      function setBusy(isBusy, text) {
+        els.translateBtn.disabled = isBusy || !state.candidates.length;
+        els.scanBtn.disabled = isBusy || !state.workbook;
+        if (text) {
+          els.statusText.textContent = text;
+        }
+      }
+
+      function setProgress(value, text) {
+        const percent = Math.max(0, Math.min(100, Math.round(value * 100)));
+        els.progressBar.style.width = `${percent}%`;
+        els.percentText.textContent = `${percent}%`;
+        if (text) {
+          els.statusText.textContent = text;
+        }
+      }
+
+      function log(message) {
+        const time = new Date().toLocaleTimeString();
+        const current = els.log.textContent === "日志将在这里显示。" ? "" : `${els.log.textContent}\n`;
+        els.log.textContent = `${current}[${time}] ${message}`;
+        els.log.scrollTop = els.log.scrollHeight;
+      }
+
+      function fail(message) {
+        setProgress(0, message);
+        log(message);
+      }
+
+      function pause(ms) {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      initialize();
+    </script>
+  </body>
+</html>

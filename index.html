@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Excel 英文括注翻译工具</title>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <style>
       :root {
@@ -704,6 +705,7 @@
       const state = {
         file: null,
         workbook: null,
+        styledWorkbook: null,
         originalName: "",
         candidates: [],
         cache: new Map(),
@@ -824,6 +826,7 @@
         try {
           const buffer = await file.arrayBuffer();
           state.workbook = XLSX.read(buffer, { type: "array", cellDates: true, cellStyles: true });
+          state.styledWorkbook = await loadStyledWorkbook(buffer, file.name);
           els.fileName.textContent = file.name;
           els.fileLine.classList.remove("hidden");
           els.scanBtn.disabled = false;
@@ -833,6 +836,54 @@
         } finally {
           setBusy(false);
         }
+      }
+
+      async function loadStyledWorkbook(buffer, fileName) {
+        const extension = getFileExtension(fileName);
+        if (!window.ExcelJS) {
+          log("富文本颜色库未加载，将只导出文本内容。");
+          return null;
+        }
+
+        if (extension !== "csv" && extension !== "xls") {
+          try {
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(buffer.slice(0));
+            return workbook;
+          } catch (error) {
+            log("当前文件无法保留原样式读取，将重新生成支持红色翻译的 .xlsx。");
+          }
+        }
+
+        return createStyledWorkbookFromSheetJS();
+      }
+
+      function createStyledWorkbookFromSheetJS() {
+        if (!state.workbook || !window.ExcelJS) {
+          return null;
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        for (const sheetName of state.workbook.SheetNames) {
+          const sourceSheet = state.workbook.Sheets[sheetName];
+          const targetSheet = workbook.addWorksheet(sheetName);
+          if (!sourceSheet?.["!ref"]) {
+            continue;
+          }
+
+          const range = XLSX.utils.decode_range(sourceSheet["!ref"]);
+          for (let row = range.s.r; row <= range.e.r; row += 1) {
+            for (let col = range.s.c; col <= range.e.c; col += 1) {
+              const address = XLSX.utils.encode_cell({ r: row, c: col });
+              const sourceCell = sourceSheet[address];
+              if (!sourceCell) {
+                continue;
+              }
+              targetSheet.getCell(row + 1, col + 1).value = sourceCell.v ?? sourceCell.w ?? "";
+            }
+          }
+        }
+        return workbook;
       }
 
       function scanWorkbook() {
@@ -1053,7 +1104,11 @@
 
           applyTranslations();
           const outputName = buildOutputName(state.originalName);
-          XLSX.writeFile(state.workbook, outputName, { compression: true });
+          if (state.styledWorkbook) {
+            await downloadStyledWorkbook(outputName);
+          } else {
+            XLSX.writeFile(state.workbook, outputName, { compression: true });
+          }
           setProgress(1, `已导出：${outputName}`);
           log(`导出完成：${outputName}`);
         } catch (error) {
@@ -1257,7 +1312,40 @@
           ];
           cell.h = `${escapeHtml(original)}<span style="color:#ff0000;">${escapeHtml(annotation)}</span>`;
           delete cell.f;
+          applyStyledTranslation(item.sheetName, item.address, original, annotation);
         }
+      }
+
+      function applyStyledTranslation(sheetName, address, original, annotation) {
+        if (!state.styledWorkbook) {
+          return;
+        }
+
+        const sheet = state.styledWorkbook.getWorksheet(sheetName);
+        if (!sheet) {
+          return;
+        }
+
+        const cell = sheet.getCell(address);
+        cell.value = {
+          richText: [
+            {
+              text: original,
+              font: cloneExcelFont(cell.font),
+            },
+            {
+              text: annotation,
+              font: {
+                ...cloneExcelFont(cell.font),
+                color: { argb: "FFFF0000" },
+              },
+            },
+          ],
+        };
+      }
+
+      function cloneExcelFont(font) {
+        return font ? { ...font } : {};
       }
 
       function getBrackets() {
@@ -1324,9 +1412,30 @@
         return `${safeName.slice(0, dot)}-括注翻译.xlsx`;
       }
 
+      async function downloadStyledWorkbook(outputName) {
+        const buffer = await state.styledWorkbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = outputName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function getFileExtension(name) {
+        const match = String(name || "").match(/\.([^.]+)$/);
+        return match ? match[1].toLowerCase() : "";
+      }
+
       function reset() {
         state.file = null;
         state.workbook = null;
+        state.styledWorkbook = null;
         state.originalName = "";
         state.candidates = [];
         state.cache.clear();

@@ -857,6 +857,17 @@
               if (!value) {
                 continue;
               }
+              const repair = detectSelfAnnotation(value);
+              if (repair) {
+                candidates.push({
+                  sheetName,
+                  address,
+                  text: repair.original,
+                  originalText: value,
+                  replaceWhole: true,
+                });
+                continue;
+              }
               if (!shouldTranslate(value)) {
                 continue;
               }
@@ -952,6 +963,26 @@
           ""
         );
         return /[A-Za-z]/.test(withoutAnnotatedPhrases);
+      }
+
+      function detectSelfAnnotation(text) {
+        const match = String(text).match(/^\s*(.+?)\s*[（(]\s*([^()（）]+?)\s*[）)]\s*$/);
+        if (!match) {
+          return null;
+        }
+
+        const original = match[1].trim();
+        const annotation = match[2].trim();
+        if (!original || !annotation) {
+          return null;
+        }
+        if (!/[A-Za-z]/.test(original)) {
+          return null;
+        }
+        if (normalizeForCompare(original) !== normalizeForCompare(annotation)) {
+          return null;
+        }
+        return { original, annotation };
       }
 
       function renderPreview(candidates) {
@@ -1210,7 +1241,7 @@
           }
           const sheet = state.workbook.Sheets[item.sheetName];
           const cell = sheet[item.address];
-          const original = extractCellText(cell) || item.text;
+          const original = item.replaceWhole ? item.text : extractCellText(cell) || item.text;
           cell.v = `${original}${left}${translation}${right}`;
           cell.w = cell.v;
           cell.t = "s";

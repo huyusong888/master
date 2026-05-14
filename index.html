@@ -1008,8 +1008,12 @@
           let done = 0;
 
           for (const text of uniqueTexts) {
-            const translated = await translateText(text);
-            state.cache.set(text, cleanTranslation(translated));
+            const translated = await translateTextSafely(text);
+            if (translated) {
+              state.cache.set(text, translated);
+            } else {
+              log(`跳过：${text}，翻译服务返回了原文或空结果。`);
+            }
             done += 1;
             els.doneCount.textContent = String(done);
             setProgress(done / uniqueTexts.length, `正在翻译 ${done}/${uniqueTexts.length}`);
@@ -1043,6 +1047,21 @@
           return translateWithProxy(text);
         }
         return translateWithMyMemory(text);
+      }
+
+      async function translateTextSafely(text) {
+        const fallback = getBuiltInTranslation(text);
+        const first = cleanTranslation(await translateText(text));
+        if (isUsefulTranslation(text, first)) {
+          return first;
+        }
+        if (fallback) {
+          return fallback;
+        }
+
+        await pause(600);
+        const second = cleanTranslation(await translateText(text));
+        return isUsefulTranslation(text, second) ? second : "";
       }
 
       async function translateWithMyMemory(text) {
@@ -1208,6 +1227,49 @@
           .replace(/^["“”']|["“”']$/g, "")
           .replace(/\s+/g, " ")
           .trim();
+      }
+
+      function isUsefulTranslation(original, translated) {
+        if (!translated) {
+          return false;
+        }
+        return normalizeForCompare(original) !== normalizeForCompare(translated);
+      }
+
+      function normalizeForCompare(value) {
+        return String(value || "")
+          .toLowerCase()
+          .replace(/[\s"'“”‘’`.,:;!?()[\]{}<>，。；：！？（）【】]/g, "");
+      }
+
+      function getBuiltInTranslation(text) {
+        if (els.targetLang.value !== "zh-CN") {
+          return "";
+        }
+        const key = normalizeForCompare(text);
+        const dictionary = {
+          cat: "猫",
+          dog: "狗",
+          name: "名称",
+          status: "状态",
+          date: "日期",
+          user: "用户",
+          id: "编号",
+          type: "类型",
+          description: "描述",
+          amount: "金额",
+          price: "价格",
+          quantity: "数量",
+          total: "总计",
+          address: "地址",
+          phone: "电话",
+          email: "邮箱",
+          country: "国家",
+          city: "城市",
+          company: "公司",
+          department: "部门",
+        };
+        return dictionary[key] || "";
       }
 
       function buildOutputName(name) {

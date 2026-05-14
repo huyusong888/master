@@ -1242,9 +1242,21 @@
           const sheet = state.workbook.Sheets[item.sheetName];
           const cell = sheet[item.address];
           const original = item.replaceWhole ? item.text : extractCellText(cell) || item.text;
-          cell.v = `${original}${left}${translation}${right}`;
+          const annotation = `${left}${translation}${right}`;
+          cell.v = `${original}${annotation}`;
           cell.w = cell.v;
           cell.t = "s";
+          cell.r = [
+            { t: original },
+            {
+              t: annotation,
+              s: {
+                color: { rgb: "FF0000" },
+              },
+            },
+          ];
+          cell.h = `${escapeHtml(original)}<span style="color:#ff0000;">${escapeHtml(annotation)}</span>`;
+          delete cell.f;
         }
       }
 
@@ -1309,7 +1321,7 @@
         if (dot <= 0) {
           return `${safeName}-括注翻译.xlsx`;
         }
-        return `${safeName.slice(0, dot)}-括注翻译${safeName.slice(dot)}`;
+        return `${safeName.slice(0, dot)}-括注翻译.xlsx`;
       }
 
       function reset() {
